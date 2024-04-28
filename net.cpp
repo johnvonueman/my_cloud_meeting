@@ -119,3 +119,60 @@ int Tcp_listen(const char * host,const char * service,socklen_t *addrlen){
    return listenfd;
 
 }
+
+void Socketpair(int family, int type, int protocol, int * sockfd)
+{
+    if(socketpair(family, type, protocol, sockfd) < 0)
+    {
+        err_quit("socketpair error");
+    }
+}
+
+//read_fd(fd,&c,1,&tfd)
+ssize_t read_fd(int fd,void *ptr,size_t nbytes,int *recvfd){
+   
+   struct msghdr msg;
+   struct iovec iov[1];
+   ssize_t n;
+
+   union{
+
+     struct cmsghdr cm;
+     char contorl[CMSG_SPACE(sizeof(int))];
+
+   }control_un;
+
+   struct cmsghdr *cmptr;
+   msg.msg_control=control_un.contorl;
+   msg.msg_controllen=sizeof(control_un.contorl);
+
+   msg.msg_name=nullptr;
+   msg.msg_namelen=0;
+   
+   iov[0].iov_base=ptr;
+   iov[0].iov_len=nbytes;
+
+   msg.msg_iov=iov;
+   msg.msg_iovlen=1;
+
+   if((n==recvmsg(fd,&msg, MSG_WAITALL))<0){//没有接收到 msghdr 中指定的 msg_iovlen 和 iov_len 字段所描述的总字节数，recvmsg 将不会返回
+      return n;
+   }
+   //CMSG_FIRSTHDR用来获取msg中第一个控制消息的指针
+   //cmsg_level字段表示控制消息所属的协议级别。在这里，它应该等于SOL_SOCKET，这表示消息是由套接字层生成的。
+   //cmsg_type字段表示控制消息的具体类型。SCM_RIGHTS是一种特殊的控制消息类型，用于在进程间传递文件描述符。
+   if((cmptr=CMSG_FIRSTHDR(&msg))!=nullptr&&(cmptr->cmsg_len==CMSG_LEN(sizeof(int)))){
+    if(cmptr->cmsg_level!=SOL_SOCKET){
+      err_msg("control level!=SOL_SOCKET");
+    }
+    if(cmptr->cmsg_type!=SCM_RIGHTS){
+      err_msg("control type!=SCM_RIGHTS");
+    }
+    *recvfd= *((int *)CMSG_DATA(cmptr));
+   }
+   else{
+    *recvfd=-1;
+   }
+   return n;
+} 
+
