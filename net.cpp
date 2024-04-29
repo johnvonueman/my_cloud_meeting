@@ -1,5 +1,3 @@
-
-
 #include "unp.h"
 #define MAXSOCKADDR 128
 static char errorMsg[] = "server error"; 
@@ -176,3 +174,15 @@ ssize_t read_fd(int fd,void *ptr,size_t nbytes,int *recvfd){
    return n;
 } 
 
+uint32_t getpeerip(int fd){
+
+  struct sockaddr_in peeraddr;
+  socklen_t len;
+  if(getpeername(fd,(sockaddr *)&peeraddr,&len)<0){
+    err_msg("getpeername error");
+  }
+  
+  return peeraddr.sin_addr.s_addr;
+
+
+}

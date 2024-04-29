@@ -1,6 +1,10 @@
 {
     "files.associations": {
         "iostream": "cpp",
-        "streambuf": "cpp"
+        "streambuf": "cpp",
+        "chrono": "cpp",
+        "random": "cpp",
+        "limits": "cpp",
+        "semaphore": "cpp"
     }
 }
