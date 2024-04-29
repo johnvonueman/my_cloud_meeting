@@ -53,12 +53,56 @@ public:
 
 Pool *user_pool=new Pool();
 
+void fd_close(int fd,int pipefd){
+    
+     
+    if(user_pool->onwer==fd){
+       //关闭 room
+       user_pool->clear_pool();
+       //写 E给父进程
+       printf("room close\n");
+
+       if(writen(pipefd,"E",1)<0){
+        err_msg("write error");
+       }
+       else{
+
+        //从room里删除
+
+        uint32_t ip;
+        pthread_mutex_lock(&user_pool->lock);
+ 
+        ip=user_pool->fd2ip[fd];
+        user_pool->num--;
+        FD_CLR(fd,&user_pool->fdset);
+        user_pool->status[fd]=CLOSE;
+        if(fd==maxfd) maxfd--;
+        pthread_mutex_unlock(&user_pool->lock);
+        
+
+        char cmd='Q';
+        if(writen(pipefd,&cmd,1)<1){
+            err_msg("writen error");
+        }
+
+        MSG msg;
+        memset(&msg,0,sizeof(msg));
+        msg.ip=ip;
+        msg.msgtype=EXIT_MEETING;
+        msg.targetfd=-1;
+
+        Close(fd);
+        sendQueue.push_msg(msg);
+       }
+    }
+}
+
+
+
 void process_main(int i,int fd){
 
     void *accept_fd(void *);
     void *sendfunc(void *);
-    
-
     pthread_t pfd1;
     int *ptr=(int *)malloc(4);
     *ptr=fd;
@@ -67,6 +111,104 @@ void process_main(int i,int fd){
     for(int i=0;i<SENDTHREADSIZE;i++){
       Pthread_create(&pfd1,nullptr,sendfunc,nullptr);
     }
+
+    for(;;){
+       fd_set rset=user_pool->fdset;
+       int nsel;
+       struct timeval time;
+       memset(&time,0,sizeof(time));
+       while((nsel=select(maxfd+1,&rset,nullptr,nullptr,&time))==0){
+             rset=user_pool->fdset;
+       }
+
+       for(int i=0;i<=maxfd;i++){
+        if(FD_ISSET(i,&rset)){
+           char head[15]={0};
+           int ret=Readn(i,head,11);
+           if(ret<=0){
+            printf("peer fd closed");
+            //关闭i，fd
+            fd_close(i,fd);
+           }
+           else if(ret==11){
+            if(head[0]=='$'){
+                //获取消息种类
+                MSG_TYPE msgtype;
+                memcpy(&msgtype,head+1,2);
+                msgtype=(MSG_TYPE)ntohs(msgtype);
+
+
+                MSG msg;
+                memset(&msg,0,sizeof(msg));
+                
+                msg.targetfd=i;
+                memcpy(&msg.ip,head+3,4);
+                
+                int msglen;
+                memcpy(&msglen,head+7,4);
+                msg.len=ntohl(msglen);
+
+                if(msgtype==IMG_SEND||msgtype==AUDIO_SEND||msgtype==TEXT_SEND){
+
+                  msg.msgtype=IMG_SEND?IMG_RECV:(AUDIO_SEND?AUDIO_RECV:TEXT_RECV);
+                  msg.ptr=(char *)malloc(msg.len);
+                  msg.ip=user_pool->fd2ip[i];
+
+                  
+                  if((ret=Readn(i,msg.ptr,msg.len))<msg.len){
+                    err_msg("3 msg format error");
+                  }
+                  else{
+
+                    char tail;
+                    Readn(i,&tail,1);
+
+                    if(tail!='#'){
+                        err_msg("4 msg format error");
+                    }
+                    else{
+                        sendQueue.push_msg(msg);
+                    }
+ 
+
+                  }
+
+                }
+                if(msgtype==CLOSE_CAMERA){
+                    char tail;
+                    Readn(i,&tail,1);
+
+                    if(tail=='#'&&msg.len==0){
+                        msg.msgtype=CLOSE_CAMERA;
+                        sendQueue.push_msg(msg);
+                    }
+                    else{
+                        err_msg("camera data error");
+                    }
+                }
+
+                
+            }
+            else{
+                err_msg("head error");
+            }
+           }
+           else{
+            err_msg("2 msg error");
+           }
+           if(--nsel<=0){
+            break;
+           }
+
+        }
+       }
+ 
+
+
+    }
+
+
+
 
 }
 
@@ -180,10 +322,67 @@ void *sendfunc(void *arg){
       short type=htons(msg.msgtype);
       memcpy(sendbuf+len,&type,sizeof(type));
       len+=2;
+
+
+      if(msg.msgtype==CREATE_MEETING_RESPONSE||msg.msgtype==PARTNER_JOIN2){
+        len+=4;
+      }
+      else if(msg.msgtype==TEXT_RECV||msg.msgtype==PARTNER_EXIT||msg.msgtype==PARTNER_JOIN||msg.msgtype==IMG_RECV||msg.msgtype==AUDIO_RECV||msg.msgtype==CLOSE_CAMERA){
+        memcpy(sendbuf+len,&msg.ip,sizeof(msg.ip));
+        len+=4;
+      }
+
+      int datasize=htonl(msg.len);
+      memcpy(sendbuf+len,&datasize,sizeof(int));
+      len+=4;
+
+      memcpy(sendbuf+len,msg.ptr,msg.len);
+      len+=msg.len;
+
+      sendbuf[len++]='#';
+
+
+      pthread_mutex_lock(&user_pool->lock);
+      
+      if(msg.msgtype==CREATE_MEETING_RESPONSE){
+        if(write(msg.targetfd,sendbuf,sizeof(sendbuf))<0){
+            err_msg("write error");
+        }
+      }
+      else if(msg.msgtype==AUDIO_RECV||msg.msgtype==IMG_RECV||msg.msgtype==AUDIO_RECV||msg.msgtype==TEXT_RECV||msg.msgtype==CLOSE_CAMERA||msg.msgtype==PARTNER_JOIN){
+
+        for(int i=0;i<=maxfd;i++){
+            if(user_pool->status[i]==ON&&msg.targetfd!=i){
+
+               if(write(i,sendbuf,sizeof(sendbuf))<0){
  
+                 err_msg("write error");
 
+               }
 
+            }
+        }
+
+      }
+      else if (msg.msgtype==PARTNER_JOIN2)
+      {
+        if(user_pool->status[msg.targetfd]==ON){
+            if(write(msg.targetfd,sendbuf,sizeof(sendbuf))<0){
+                err_msg("write error");
+            }
+        }
+      }
+      
+      pthread_mutex_unlock(&user_pool->lock);
+
+      if(msg.ptr){
+        free(msg.ptr);
+        msg.ptr=nullptr;
+      }
+
+      
 
     }
-
+    free(sendbuf);
+    return nullptr;
 }

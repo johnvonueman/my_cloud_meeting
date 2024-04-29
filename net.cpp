@@ -186,3 +186,55 @@ uint32_t getpeerip(int fd){
 
 
 }
+
+ssize_t Readn(int fd,void *buf,size_t size){
+
+     ssize_t lefttoread=size,hasread=0;
+     char *ptr=(char *)buf;
+     while(lefttoread>0){
+
+      if((hasread=read(fd,ptr,size))<0){
+        
+         if(errno == EINTR)//errno是一个全局变量，代表的是系统调用的错误类型，EINTR代表中断
+             {
+                hasread = 0;
+             }
+         else{
+          return -1;
+         }
+      }
+      else if(hasread==0){
+        break;//读完
+      }
+      lefttoread=size-hasread;
+      ptr+=hasread;
+
+     }
+
+     return size-lefttoread;
+
+}
+
+ssize_t writen(int fd,const void *buf,size_t size){
+
+    ssize_t lefttowrite=size,haswrite=0;
+    char *ptr=(char *)buf;
+    while(lefttowrite>0){
+       if((haswrite=write(fd,ptr,size))<0){
+         if(errno==EINTR){
+          return 0;
+         }
+         else{
+          return -1;
+         }
+       }
+       else if(haswrite==0){
+        break;
+       }
+       lefttowrite-=haswrite;
+       ptr+=haswrite;
+
+    }
+    return size-lefttowrite;//不一样
+
+}

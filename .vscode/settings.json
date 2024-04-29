@@ -5,6 +5,7 @@
         "chrono": "cpp",
         "random": "cpp",
         "limits": "cpp",
-        "semaphore": "cpp"
+        "semaphore": "cpp",
+        "cerrno": "cpp"
     }
 }
