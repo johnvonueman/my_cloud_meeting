@@ -100,7 +100,6 @@ void fd_close(int fd,int pipefd){
 
 
 void process_main(int i,int fd){
-
     void *accept_fd(void *);
     void *sendfunc(void *);
     pthread_t pfd1;
@@ -120,7 +119,6 @@ void process_main(int i,int fd){
        while((nsel=select(maxfd+1,&rset,nullptr,nullptr,&time))==0){
              rset=user_pool->fdset;
        }
-
        for(int i=0;i<=maxfd;i++){
         if(FD_ISSET(i,&rset)){
            char head[15]={0};

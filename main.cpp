@@ -5,8 +5,9 @@
 using namespace std;
 socklen_t addrlen;
 int listenfd;
+Thread *tptr;
 Room *room;
-
+int nprocesses,navail;
 int make_process(int i,int listenfd){//并没有用到listenfd
 void process_main(int, int);
 int pipefd[2];
@@ -27,7 +28,17 @@ if((pid=fork())>0){
 }
 
 
+int thread_make(int i){
+    void *thread_main(void *);
+    int *arg=(int *)calloc(1,sizeof(int));
 
+    *arg=i;
+
+    //创建线程thread_main()
+    Pthread_create(&tptr[i].thread_tid,nullptr,thread_main,arg);
+
+
+}
 
 
 
@@ -51,7 +62,7 @@ int main(int argc,char **argv){
    }
 
    int nthreads=atoi(argv[argc-2]);
-   int nprocesses=atoi(argv[argc-1]);
+   nprocesses=atoi(argv[argc-1]);
    
    
    //创建房间
@@ -72,6 +83,12 @@ int main(int argc,char **argv){
    
    }
 
+   //创建线程池
+   for(int i=0;i<nthreads;i++){{
+
+      //创建线程thread_make(i);
+
+   }}
 
 
    printf("创建成功，线程数%d,进程数%d",nthreads,nprocesses);
