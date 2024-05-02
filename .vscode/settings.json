@@ -6,6 +6,7 @@
         "random": "cpp",
         "limits": "cpp",
         "semaphore": "cpp",
-        "cerrno": "cpp"
+        "cerrno": "cpp",
+        "cmath": "cpp"
     }
 }

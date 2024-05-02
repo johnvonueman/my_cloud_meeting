@@ -29,7 +29,8 @@ struct Thread
 {
    pthread_t thread_tid;
 };
+typedef void * (THREAD_FUNC) (void *);
 
-void Pthread_create(pthread_t *tid,const pthread_attr_t *attr,void *(*func) (void *) ,void *arg);
+void Pthread_create(pthread_t *tid,const pthread_attr_t *attr,THREAD_FUNC func,void *arg);
 
 void Pthread_detach(pthread_t tid);

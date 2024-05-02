@@ -28,21 +28,26 @@ if((pid=fork())>0){
 }
 
 
-int thread_make(int i){
+void thread_make(int i){
     void *thread_main(void *);
     int *arg=(int *)calloc(1,sizeof(int));
-
     *arg=i;
-
     //创建线程thread_main()
-    Pthread_create(&tptr[i].thread_tid,nullptr,thread_main,arg);
-
-
+    //pthread_create(&tptr[i].thread_tid,nullptr,thread_main,arg);
+    //  printf("0\n");
+    //printf("%d\n",i);
+    //tptr[i].thread_tid=1;
+    //printf("%ld\n",tptr[i].thread_tid=1);
+    Pthread_create(&tptr[i].thread_tid, NULL, thread_main, arg);    
 }
 
 
 
 int main(int argc,char **argv){
+   void sig_child(int signo);
+   Signal(SIGCHLD, sig_child);
+   fd_set rset,master;
+   FD_ZERO(&master);
 
    if(argc==4){
      //tcp连接，
@@ -60,7 +65,7 @@ int main(int argc,char **argv){
       err_quit("usage:./app [host] [port] [threads] [processes]");
 
    }
-
+   
    int nthreads=atoi(argv[argc-2]);
    nprocesses=atoi(argv[argc-1]);
    
@@ -68,12 +73,13 @@ int main(int argc,char **argv){
    //创建房间
    room=new Room(nprocesses);
    
-   Thread *tptr=(Thread*)calloc(nthreads,sizeof(Thread));
+   tptr=(Thread*)calloc(nthreads,sizeof(Thread));
    
-   fd_set res,master;
    FD_ZERO(&master);
    int maxfd=0;
    //进程池创建
+   
+   
    for(int i=0;i<nprocesses;i++){
 
       // 创建线程
@@ -82,18 +88,67 @@ int main(int argc,char **argv){
       maxfd=max(maxfd,room->pptr[i].child_pipefd);
    
    }
-
+   
    //创建线程池
-   for(int i=0;i<nthreads;i++){{
+   
+   for(int i=0;i<nthreads;i++){
+      
+      thread_make(i);
+      
+   }
 
-      //创建线程thread_make(i);
-
-   }}
-
-
+   
    printf("创建成功，线程数%d,进程数%d",nthreads,nprocesses);
 
+    for(;;){
+     
+       rset=master;
+       int nsel;
+       if((nsel=select(maxfd+1,&rset,nullptr,nullptr,nullptr))==0){
+         continue;
+       }
+       
+       for(int i=0;i<nprocesses;i++){
+
+         if(FD_ISSET(room->pptr[i].child_pipefd,&rset)){
+
+           char ch;
+           int n;
+           if((n=Readn(room->pptr[i].child_pipefd,&ch,1))<=0){
+            err_quit("child %d terminal unexpectly\n",i);
+           }
+           
+           if(ch=='E'){
+              pthread_mutex_lock(&room->lock);
+              
+              room->pptr[i].child_status=0;
+              room->nval++;
+              printf("room %d is now free\n",room->pptr[i].child_id);
+
+              pthread_mutex_unlock(&room->lock);
 
 
+           }
+           else if(ch=='Q'){
 
+              pthread_mutex_lock(&room->lock);
+             
+              room->pptr[i].total--;
+
+              pthread_mutex_unlock(&room->lock);
+
+           }
+           else{
+
+              err_msg("read from %d error\n",room->pptr[i].child_pipefd);
+              continue;
+
+           }
+         }
+
+       }
+      if(--nsel==0) break;
+    }
+
+    return 0;
 }

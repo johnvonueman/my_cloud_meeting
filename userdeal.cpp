@@ -1,18 +1,22 @@
-#include <unp.h>
-#include <msg.h>
-#include <netheader.h>
-#include <mypthread.h>
+#include "unp.h"
+#include "msg.h"
+#include "netheader.h"
+#include "mypthread.h"
 extern socklen_t addrlen;
 extern Room *room;
 extern int nprocesses;
+extern int listenfd;
 pthread_mutex_t mlock=PTHREAD_MUTEX_INITIALIZER;
 void *thread_main(void *arg){
+    //printf("here\n");
     void dowithuser(int connfd);
+    
     int i=*(int *)arg;
     free(arg);
     int connfd;
     pthread_detach(pthread_self());
-
+    
+    printf("thread %d starting\n", i);
 
     struct sockaddr_in *cliaddr=(sockaddr_in *)Calloc(1,addrlen);
     socklen_t clilen;
@@ -24,11 +28,11 @@ void *thread_main(void *arg){
         clilen=addrlen;
 
         pthread_mutex_lock(&mlock);
-        connfd=Accept(i,(sockaddr*)cliaddr,&clilen);
+        connfd=Accept(listenfd,(sockaddr*)cliaddr,&clilen);
         pthread_mutex_unlock(&mlock);
 
         printf("connect from %s\n",Sock_ntop(buf,MAXSOCKADDR,(sockaddr*)cliaddr,clilen));
-
+         
         dowithuser(connfd);
 
     }
@@ -38,11 +42,18 @@ void *thread_main(void *arg){
 void dowithuser(int connfd){
      void writetofd(int fd,MSG msg);
      int ret;
+     char head[15]={0};
      for(;;){
-       char head[15];
+       
+       //printf("%d",connfd);
        ret=Readn(connfd,head,11);
+       //printf("%d",ret);
+       
+    //    for(int k=0;k<11;k++){
+    //      printf("%c",head[1]);
+    //    }
        if(ret<=0){
-        err_msg("readn error");
+        printf("%d close\n", connfd);
         Close(connfd);
         return ;
        }
@@ -67,7 +78,9 @@ void dowithuser(int connfd){
         int datasize;
         memcpy(&datasize,head+7,4);
         datasize=(int)ntohl(datasize);
-
+        
+        
+       
         if(msgtype==CREATE_MEETING){
           char tail;
           Readn(connfd,&tail,1);
@@ -111,14 +124,17 @@ void dowithuser(int connfd){
 
 
                     char cmd='C';
+                    //printf("%d",room->pptr[i].child_pipefd);
                     if(write_fd(room->pptr[i].child_pipefd,&cmd,1,connfd)<0){
 
                         err_msg("write_fd error\n");
                     }
                     else{
-
+                        
                         Close(connfd);
+                       // printf("aaaaaaaaaaaa\n");
                         printf("room %d is empty\n",room->pptr[i].child_id);
+                        
                         room->nval--;
                         room->pptr[i].total++;
                         room->pptr[i].child_status=1;
@@ -210,7 +226,6 @@ void dowithuser(int connfd){
 
                   }
                   else{
-
                       msg.ptr = (char *)malloc(msg.len);
                       uint32_t fail = 0;
                       memcpy(msg.ptr, &fail, sizeof(uint32_t));
@@ -239,16 +254,8 @@ void dowithuser(int connfd){
         else{
             printf("data format error\n");
         }
-
-
-
        }
-
-
-
      }
-
-
 
 }
 
@@ -274,6 +281,8 @@ void writetofd(int fd,MSG msg){
 
 
     buf[bytestowrite++]='#';
+    
+   // printf("%s\n",buf);
 
     if(writen(fd,buf,bytestowrite)<bytestowrite){
         printf("write fail\n");
